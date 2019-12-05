@@ -1,3 +1,4 @@
+#-*- coding:utf-8 -*-
 import os
 import sys
 import time
@@ -16,6 +17,7 @@ from utils import CTCLabelConverter, AttnLabelConverter, Averager
 from dataset import hierarchical_dataset, AlignCollate, Batch_Balanced_Dataset
 from model import Model
 from test import validation
+import json
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -30,13 +32,13 @@ def train(opt):
     opt.batch_ratio = opt.batch_ratio.split('-')
     train_dataset = Batch_Balanced_Dataset(opt)
 
-    AlignCollate_valid = AlignCollate(imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
-    valid_dataset = hierarchical_dataset(root=opt.valid_data, opt=opt)
-    valid_loader = torch.utils.data.DataLoader(
-        valid_dataset, batch_size=opt.batch_size,
-        shuffle=True,  # 'True' to check training progress with validation function.
-        num_workers=int(opt.workers),
-        collate_fn=AlignCollate_valid, pin_memory=True)
+    # AlignCollate_valid = AlignCollate(imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
+    # valid_dataset = hierarchical_dataset(root=opt.valid_data, opt=opt)
+    # valid_loader = torch.utils.data.DataLoader(
+    #     valid_dataset, batch_size=opt.batch_size,
+    #     shuffle=True,  # 'True' to check training progress with validation function.
+    #     num_workers=int(opt.workers),
+    #     collate_fn=AlignCollate_valid, pin_memory=True)
     print('-' * 80)
 
     """ model configuration """
@@ -163,54 +165,56 @@ def train(opt):
 
         loss_avg.add(cost)
 
+
         # validation part
-        if i % opt.valInterval == 0:
-            elapsed_time = time.time() - start_time
-            # for log
-            with open(f'./saved_models/{opt.experiment_name}/log_train.txt', 'a') as log:
-                model.eval()
-                with torch.no_grad():
-                    valid_loss, current_accuracy, current_norm_ED, preds, confidence_score, labels, infer_time, length_of_data = validation(
-                        model, criterion, valid_loader, converter, opt)
-                model.train()
+        # if i % opt.valInterval == 0:
+        #     elapsed_time = time.time() - start_time
+        #     # for log
+        #     with open(f'./saved_models/{opt.experiment_name}/log_train.txt', 'a') as log:
+        #         model.eval()
+        #         with torch.no_grad():
+        #             valid_loss, current_accuracy, current_norm_ED, preds, confidence_score, labels, infer_time, length_of_data = validation(
+        #                 model, criterion, valid_loader, converter, opt)
+        #         model.train()
 
-                # training loss and validation loss
-                loss_log = f'[{i}/{opt.num_iter}] Train loss: {loss_avg.val():0.5f}, Valid loss: {valid_loss:0.5f}, Elapsed_time: {elapsed_time:0.5f}'
-                print(loss_log)
-                log.write(loss_log + '\n')
-                loss_avg.reset()
+        #         # training loss and validation loss
+        #         loss_log = f'[{i}/{opt.num_iter}] Train loss: {loss_avg.val():0.5f}, Valid loss: {valid_loss:0.5f}, Elapsed_time: {elapsed_time:0.5f}'
+        #         print(loss_log)
+        #         log.write(loss_log + '\n')
+        #         loss_avg.reset()
 
-                current_model_log = f'{"Current_accuracy":17s}: {current_accuracy:0.3f}, {"Current_norm_ED":17s}: {current_norm_ED:0.2f}'
-                print(current_model_log)
-                log.write(current_model_log + '\n')
+        #         current_model_log = f'{"Current_accuracy":17s}: {current_accuracy:0.3f}, {"Current_norm_ED":17s}: {current_norm_ED:0.2f}'
+        #         print(current_model_log)
+        #         log.write(current_model_log + '\n')
 
-                # keep best accuracy model (on valid dataset)
-                if current_accuracy > best_accuracy:
-                    best_accuracy = current_accuracy
-                    torch.save(model.state_dict(), f'./saved_models/{opt.experiment_name}/best_accuracy.pth')
-                if current_norm_ED < best_norm_ED:
-                    best_norm_ED = current_norm_ED
-                    torch.save(model.state_dict(), f'./saved_models/{opt.experiment_name}/best_norm_ED.pth')
-                best_model_log = f'{"Best_accuracy":17s}: {best_accuracy:0.3f}, {"Best_norm_ED":17s}: {best_norm_ED:0.2f}'
-                print(best_model_log)
-                log.write(best_model_log + '\n')
+        #         # keep best accuracy model (on valid dataset)
+        #         if current_accuracy > best_accuracy:
+        #             best_accuracy = current_accuracy
+        #             torch.save(model.state_dict(), f'./saved_models/{opt.experiment_name}/best_accuracy.pth')
+        #         if current_norm_ED < best_norm_ED:
+        #             best_norm_ED = current_norm_ED
+        #             torch.save(model.state_dict(), f'./saved_models/{opt.experiment_name}/best_norm_ED.pth')
+        #         best_model_log = f'{"Best_accuracy":17s}: {best_accuracy:0.3f}, {"Best_norm_ED":17s}: {best_norm_ED:0.2f}'
+        #         print(best_model_log)
+        #         log.write(best_model_log + '\n')
 
-                # show some predicted results
-                print('-' * 80)
-                print(f'{"Ground Truth":25s} | {"Prediction":25s} | Confidence Score & T/F')
-                log.write(f'{"Ground Truth":25s} | {"Prediction":25s} | {"Confidence Score"}\n')
-                print('-' * 80)
-                for gt, pred, confidence in zip(labels[:5], preds[:5], confidence_score[:5]):
-                    if 'Attn' in opt.Prediction:
-                        gt = gt[:gt.find('[s]')]
-                        pred = pred[:pred.find('[s]')]
+        #         # show some predicted results
+        #         print('-' * 80)
+        #         print(f'{"Ground Truth":25s} | {"Prediction":25s} | Confidence Score & T/F')
+        #         log.write(f'{"Ground Truth":25s} | {"Prediction":25s} | {"Confidence Score"}\n')
+        #         print('-' * 80)
+        #         for gt, pred, confidence in zip(labels[:5], preds[:5], confidence_score[:5]):
+        #             if 'Attn' in opt.Prediction:
+        #                 gt = gt[:gt.find('[s]')]
+        #                 pred = pred[:pred.find('[s]')]
 
-                    print(f'{gt:25s} | {pred:25s} | {confidence:0.4f}\t{str(pred == gt)}')
-                    log.write(f'{gt:25s} | {pred:25s} | {confidence:0.4f}\t{str(pred == gt)}\n')
-                print('-' * 80)
+        #             print(f'{gt:25s} | {pred:25s} | {confidence:0.4f}\t{str(pred == gt)}')
+        #             log.write(f'{gt:25s} | {pred:25s} | {confidence:0.4f}\t{str(pred == gt)}\n')
+        #         print('-' * 80)
 
         # save model per 1e+5 iter.
-        if (i + 1) % 1e+5 == 0:
+        if (i + 1) % 1e+3 == 0:
+            print(f'iter{i}, loss{cost}')
             torch.save(
                 model.state_dict(), f'./saved_models/{opt.experiment_name}/iter_{i+1}.pth')
 
@@ -239,17 +243,17 @@ if __name__ == '__main__':
     parser.add_argument('--eps', type=float, default=1e-8, help='eps for Adadelta. default=1e-8')
     parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping value. default=5')
     """ Data processing """
-    parser.add_argument('--select_data', type=str, default='MJ-ST',
+    parser.add_argument('--select_data', type=str, default='/',
                         help='select training data (default is MJ-ST, which means MJ and ST used as training data)')
-    parser.add_argument('--batch_ratio', type=str, default='0.5-0.5',
+    parser.add_argument('--batch_ratio', type=str, default='1',
                         help='assign ratio for each selected data in the batch')
     parser.add_argument('--total_data_usage_ratio', type=str, default='1.0',
                         help='total data usage ratio, this ratio is multiplied to total number of data.')
-    parser.add_argument('--batch_max_length', type=int, default=25, help='maximum-label-length')
-    parser.add_argument('--imgH', type=int, default=32, help='the height of the input image')
-    parser.add_argument('--imgW', type=int, default=100, help='the width of the input image')
+    parser.add_argument('--batch_max_length', type=int, default=60, help='maximum-label-length')
+    parser.add_argument('--imgH', type=int, default=96, help='the height of the input image')
+    parser.add_argument('--imgW', type=int, default=1440, help='the width of the input image')
     parser.add_argument('--rgb', action='store_true', help='use rgb input')
-    parser.add_argument('--character', type=str, default='0123456789abcdefghijklmnopqrstuvwxyz', help='character label')
+    parser.add_argument('--character', default='dict.json' ,help='character label')
     parser.add_argument('--sensitive', action='store_true', help='for sensitive character mode')
     parser.add_argument('--PAD', action='store_true', help='whether to keep ratio then pad for image resize')
     parser.add_argument('--data_filtering_off', action='store_true', help='for data_filtering_off mode')
@@ -274,10 +278,11 @@ if __name__ == '__main__':
     os.makedirs(f'./saved_models/{opt.experiment_name}', exist_ok=True)
 
     """ vocab / character number configuration """
-    if opt.sensitive:
-        # opt.character += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-        opt.character = string.printable[:-6]  # same with ASTER setting (use 94 char).
-
+    # if opt.sensitive:
+    #     # opt.character += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    #     opt.character = string.printable[:-6]  # same with ASTER setting (use 94 char).
+    with open(opt.character,'r',encoding="UTF-8-sig") as fp:
+        opt.character = json.loads(fp.read())
     """ Seed and GPU setting """
     # print("Random Seed: ", opt.manualSeed)
     random.seed(opt.manualSeed)

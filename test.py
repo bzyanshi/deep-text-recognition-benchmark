@@ -13,8 +13,11 @@ from nltk.metrics.distance import edit_distance
 from utils import CTCLabelConverter, AttnLabelConverter, Averager
 from dataset import hierarchical_dataset, AlignCollate
 from model import Model
+import json
+from my_edit_distence import get_edit_distance
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+error_list = []
 
 def benchmark_all_eval(model, criterion, converter, opt, calculate_infer_time=False):
     """ evaluation with 10 benchmark evaluation datasets """
@@ -75,6 +78,9 @@ def validation(model, criterion, evaluation_loader, converter, opt):
     infer_time = 0
     valid_loss_avg = Averager()
 
+    total_num = 0
+    AR_num = 0
+    CR_num = 0
     for i, (image_tensors, labels) in enumerate(evaluation_loader):
         batch_size = image_tensors.size(0)
         length_of_data = length_of_data + batch_size
@@ -120,19 +126,46 @@ def validation(model, criterion, evaluation_loader, converter, opt):
         preds_prob = F.softmax(preds, dim=2)
         preds_max_prob, _ = preds_prob.max(dim=2)
         confidence_score_list = []
+        
         for gt, pred, pred_max_prob in zip(labels, preds_str, preds_max_prob):
             if 'Attn' in opt.Prediction:
                 gt = gt[:gt.find('[s]')]
                 pred_EOS = pred.find('[s]')
                 pred = pred[:pred_EOS]  # prune after "end of sentence" token ([s])
                 pred_max_prob = pred_max_prob[:pred_EOS]
-
+            
+            with open('result.txt','r+',encoding="utf-8") as fr1:
+                #json.dump((pred, gt), fr)
+                fr1.read()
+                fr1.write(f'{pred}\n')
+            
+            
+            with open('truth.txt','r+',encoding="utf-8") as fr2:
+                #json.dump((pred, gt), fr)
+                fr2.read()
+                fr2.write(f'{gt}\n')
+            
+            #print(gt, len(gt))
+            
             if pred == gt:
                 n_correct += 1
+                with open('right_list.txt','r+',encoding="utf-8") as fr:
+                    #json.dump((pred, gt), fr)
+                    fr.read()
+                    fr.write(f'gt   {gt}\npred  {pred}\n')
             if len(gt) == 0:
                 norm_ED += 1
             else:
+                total_num = total_num + len(gt)
+                #error_num = error_num + edit_distance(pred, gt)
+                AR_num_line, CR_num_line = get_edit_distance(pred, gt)
+                AR_num = AR_num + AR_num_line
+                CR_num = CR_num + CR_num_line
                 norm_ED += edit_distance(pred, gt) / len(gt)
+                with open('error_list.txt','r+',encoding="utf-8") as fe:
+                    #json.dump((pred, gt), fe)
+                    fe.read()
+                    fe.write(f'gt   {gt}\npred  {pred}\n')
 
             # calculate confidence score (= multiply of pred_max_prob)
             try:
@@ -142,9 +175,12 @@ def validation(model, criterion, evaluation_loader, converter, opt):
             confidence_score_list.append(confidence_score)
             # print(pred, gt, pred==gt, confidence_score)
 
-    accuracy = n_correct / float(length_of_data) * 100
+    #accuracy = n_correct / float(length_of_data) * 100
+    CR_precision = (total_num - CR_num) / total_num * 100
+    AR_precision = (total_num - AR_num) / total_num * 100
 
-    return valid_loss_avg.val(), accuracy, norm_ED, preds_str, confidence_score_list, labels, infer_time, length_of_data
+    #return valid_loss_avg.val(), accuracy, norm_ED, preds_str, confidence_score_list, labels, infer_time, length_of_data
+    return valid_loss_avg.val(), CR_precision, AR_precision, norm_ED, preds_str, confidence_score_list, labels, infer_time, length_of_data
 
 
 def test(opt):
@@ -192,12 +228,13 @@ def test(opt):
                 shuffle=False,
                 num_workers=int(opt.workers),
                 collate_fn=AlignCollate_evaluation, pin_memory=True)
-            _, accuracy_by_best_model, _, _, _, _, _, _ = validation(
+            _, CR_precision, AR_precision, _, _, _, _, _, _ = validation(
                 model, criterion, evaluation_loader, converter, opt)
 
-            print(accuracy_by_best_model)
+            print('CR: ', CR_precision)
+            print('AR: ', AR_precision)
             with open('./result/{0}/log_evaluation.txt'.format(opt.experiment_name), 'a') as log:
-                log.write(str(accuracy_by_best_model) + '\n')
+                log.write(f'CR: {CR_precision}, AR: {AR_precision}\n')
 
 
 if __name__ == '__main__':
@@ -205,14 +242,14 @@ if __name__ == '__main__':
     parser.add_argument('--eval_data', required=True, help='path to evaluation dataset')
     parser.add_argument('--benchmark_all_eval', action='store_true', help='evaluate 10 benchmark evaluation datasets')
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=4)
-    parser.add_argument('--batch_size', type=int, default=192, help='input batch size')
+    parser.add_argument('--batch_size', type=int, default=90, help='input batch size')
     parser.add_argument('--saved_model', required=True, help="path to saved_model to evaluation")
     """ Data processing """
-    parser.add_argument('--batch_max_length', type=int, default=25, help='maximum-label-length')
-    parser.add_argument('--imgH', type=int, default=32, help='the height of the input image')
-    parser.add_argument('--imgW', type=int, default=100, help='the width of the input image')
+    parser.add_argument('--batch_max_length', type=int, default=113, help='maximum-label-length')
+    parser.add_argument('--imgH', type=int, default=96, help='the height of the input image')
+    parser.add_argument('--imgW', type=int, default=1440, help='the width of the input image')
     parser.add_argument('--rgb', action='store_true', help='use rgb input')
-    parser.add_argument('--character', type=str, default='0123456789abcdefghijklmnopqrstuvwxyz', help='character label')
+    parser.add_argument('--character', default='dict.json' ,help='character label')
     parser.add_argument('--sensitive', action='store_true', help='for sensitive character mode')
     parser.add_argument('--PAD', action='store_true', help='whether to keep ratio then pad for image resize')
     parser.add_argument('--data_filtering_off', action='store_true', help='for data_filtering_off mode')
@@ -230,11 +267,20 @@ if __name__ == '__main__':
     opt = parser.parse_args()
 
     """ vocab / character number configuration """
-    if opt.sensitive:
-        opt.character = string.printable[:-6]  # same with ASTER setting (use 94 char).
-
+    # if opt.sensitive:
+    #     opt.character = string.printable[:-6]  # same with ASTER setting (use 94 char).
+    with open(opt.character,'r',encoding="utf-8") as fp:
+        opt.character = json.loads(fp.read())
     cudnn.benchmark = True
     cudnn.deterministic = True
     opt.num_gpu = torch.cuda.device_count()
-
+    
+    if not os.path.exists('right_list.txt'):
+        os.mknod('right_list.txt')
+    if not os.path.exists('error_list.txt'):
+        os.mknod('error_list.txt')
+    if not os.path.exists('result.txt'):
+        os.mknod('result.txt')
+    if not os.path.exists('truth.txt'):
+        os.mknod('truth.txt')
     test(opt)

@@ -1,5 +1,5 @@
 """ a modified version of CRNN torch repository https://github.com/bgshih/crnn/blob/master/tool/create_dataset.py """
-
+#-*- coding:utf-8 -*-
 import fire
 import os
 import lmdb
