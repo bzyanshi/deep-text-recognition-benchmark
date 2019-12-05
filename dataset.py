@@ -1,3 +1,4 @@
+#-*- coding:utf-8 -*-
 import os
 import sys
 import re
@@ -139,15 +140,15 @@ class LmdbDataset(Dataset):
                     label = txn.get(label_key).decode('utf-8')
 
                     if len(label) > self.opt.batch_max_length:
-                        # print(f'The length of the label is longer than max_length: length
+                        print(f'The length of the label is longer than max_length: length{len(label)}')
                         # {len(label)}, {label} in dataset {self.root}')
                         continue
 
                     # By default, images containing characters which are not in opt.character are filtered.
                     # You can add [UNK] token to `opt.character` in utils.py instead of this filtering.
-                    out_of_char = f'[^{self.opt.character}]'
-                    if re.search(out_of_char, label.lower()):
-                        continue
+                    # out_of_char = f'[^{self.opt.character}]'
+                    # if re.search(out_of_char, label.lower()):
+                    #     continue
 
                     self.filtered_index_list.append(index)
 

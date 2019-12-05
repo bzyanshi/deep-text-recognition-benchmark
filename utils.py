@@ -1,4 +1,6 @@
+#-*- coding:utf-8 -*-
 import torch
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -8,7 +10,7 @@ class CTCLabelConverter(object):
     def __init__(self, character):
         # character (str): set of the possible characters.
         dict_character = list(character)
-
+        
         self.dict = {}
         for i, char in enumerate(dict_character):
             # NOTE: 0 is reserved for 'blank' token required by CTCLoss
@@ -56,7 +58,7 @@ class AttnLabelConverter(object):
     def __init__(self, character):
         # character (str): set of the possible characters.
         # [GO] for the start token of the attention decoder. [s] for end-of-sentence token.
-        list_token = ['[GO]', '[s]']  # ['[s]','[UNK]','[PAD]','[GO]']
+        list_token = ['[GO]', '[s]', u'\u03A9']  # ['[s]','[UNK]','[PAD]','[GO]']°°¶∏°°±Ì æ[UNK]
         list_character = list(character)
         self.character = list_token + list_character
 
@@ -65,7 +67,7 @@ class AttnLabelConverter(object):
             # print(i, char)
             self.dict[char] = i
 
-    def encode(self, text, batch_max_length=25):
+    def encode(self, text, batch_max_length=60):
         """ convert text-label into text-index.
         input:
             text: text labels of each image. [batch_size]
@@ -84,7 +86,21 @@ class AttnLabelConverter(object):
         for i, t in enumerate(text):
             text = list(t)
             text.append('[s]')
-            text = [self.dict[char] for char in text]
+            text1 = []
+            for char in text:
+                if char in self.dict.keys():
+                    text1.append(self.dict[char])
+                else:
+                    text1.append(self.dict[u'\u03A9'])
+            text = text1
+            #import pdb 
+            #pdb.set_trace()
+            if len(text) < 60:
+                batch_text[i][1:1 + len(text)] = torch.LongTensor(text)  # batch_text[:, 0] = [GO] token
+            else:
+                batch_text[i][1:60] = torch.LongTensor(text[1:60])
+                batch_text[i, 61] = 1
+
             batch_text[i][1:1 + len(text)] = torch.LongTensor(text)  # batch_text[:, 0] = [GO] token
         return (batch_text.to(device), torch.IntTensor(length).to(device))
 
